@@ -12,5 +12,7 @@ RUN mkdir -p ${FUNCTION_DIR} \
 
 COPY handler.js ${FUNCTION_DIR}
 
+WORKDIR ${FUNCTION_DIR}
+
 ENTRYPOINT [ "/var/task/node_modules/.bin/aws-lambda-ric" ]
 CMD [ "handler.run" ]
