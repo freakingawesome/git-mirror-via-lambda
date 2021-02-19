@@ -8,6 +8,6 @@ test('Empty Stack', () => {
     const stack = new GitMirrorViaLambda.GitMirrorViaLambdaStack(app, 'MyTestStack');
     // THEN
     expectCDK(stack).to(matchTemplate({
-      "Resources": {}
+        "Resources": {}
     }, MatchStyle.EXACT))
 });
