@@ -30,7 +30,7 @@ exports['POST:/api/mirror'] = async (event: any) => {
         const meta = {
             PK: `MIRROR#${authHash}`,
             SK: `CONFIG`,
-            'GSI-1-SK': payload.sourceRemote,
+            'GSI-1-SK': `REMOTE#${payload.sourceRemote}`,
         };
 
         try {
