@@ -9,6 +9,7 @@ import * as path from 'path';
 interface AppLambdas {
     webhookHandler: lambda.Function,
     mirrorHandler: lambda.Function,
+    apiHandler: lambda.Function,
 }
 
 export class GitMirrorViaLambdaStack extends cdk.Stack {
@@ -16,17 +17,20 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
         super(scope, id, props);
 
         const vpc = new ec2.Vpc(this, 'Vpc', {
-          maxAzs: 2,
+          maxAzs: 1,
         });
 
         const fileSystem = this.createFileSystem(vpc);
 
-        const { webhookHandler } = this.createLambdas(vpc, fileSystem);
-        this.createApiGateway(webhookHandler);
+        const lambdas = this.createLambdas(vpc, fileSystem);
+        this.createApiGateway(lambdas);
         const table = this.createDynamoDB();
 
-        table.grantReadWriteData(webhookHandler);
-        webhookHandler.addEnvironment('TABLE_NAME', table.tableName);
+        table.grantReadWriteData(lambdas.webhookHandler);
+        table.grantReadWriteData(lambdas.apiHandler);
+
+        lambdas.webhookHandler.addEnvironment('TABLE_NAME', table.tableName);
+        lambdas.apiHandler.addEnvironment('TABLE_NAME', table.tableName);
     }
 
     createFileSystem(vpc: ec2.IVpc): efs.AccessPoint {
@@ -52,8 +56,15 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
 
     createLambdas(vpc: ec2.IVpc, fileSystem: efs.IAccessPoint): AppLambdas {
         const webhookHandler = new lambda.Function(this, "gitMirrorViaLambdaWebhookFunction", {
-            code: new lambda.AssetCode(path.join(__dirname, "../src/webhook")),
-            handler: 'handler.run',
+            code: new lambda.AssetCode(path.join(__dirname, "../src")),
+            handler: 'webhook/handler.run',
+            runtime: lambda.Runtime.NODEJS_14_X,
+        });
+
+        // TODO: Protect with IAM Role
+        const apiHandler = new lambda.Function(this, "gitMirrorViaLambdaApiFunction", {
+            code: new lambda.AssetCode(path.join(__dirname, "../src")),
+            handler: 'api/handler.router',
             runtime: lambda.Runtime.NODEJS_14_X,
         });
 
@@ -64,19 +75,19 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
 
-        return { webhookHandler, mirrorHandler };
+        return { webhookHandler, mirrorHandler, apiHandler };
     }
 
-    createApiGateway(webhookHandler: lambda.Function) {
-        const api = new apigateway.RestApi(this, 'gitMirrorViaLambdaWebhook', {
+    createApiGateway(lambdas: AppLambdas) {
+        const gateway = new apigateway.RestApi(this, 'gitMirrorViaLambdaWebhook', {
             restApiName: 'Git Mirror via Lambda Webhook',
         });
 
-        const lambdaIntegration = new apigateway.LambdaIntegration(webhookHandler);
+        const webhook = gateway.root.addResource('webhook');
+        const api = gateway.root.addResource('api');
 
-        const webhook = api.root.addResource('api').addResource('webhook');
-
-        webhook.addMethod('POST', lambdaIntegration);
+        webhook.addMethod('POST', new apigateway.LambdaIntegration(lambdas.webhookHandler));
+        api.addResource('mirror').addMethod('POST', new apigateway.LambdaIntegration(lambdas.apiHandler));
     }
 
     createDynamoDB(): dynamodb.Table {

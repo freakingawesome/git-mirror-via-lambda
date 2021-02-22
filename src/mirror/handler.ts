@@ -7,15 +7,3 @@ exports.run = async (event: any) => {
         body: JSON.stringify(payload)
     }
 };
-
-export function httpResponse(success: boolean, error?: string, statusCode?: Number): any {
-    var payload: any = { success };
-    if (error) {
-        payload.error = error;
-    }
-
-    return {
-        statusCode: statusCode || (success ? 200 : 400),
-        body: JSON.stringify(payload)
-    }
-}

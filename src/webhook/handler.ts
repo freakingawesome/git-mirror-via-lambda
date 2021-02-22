@@ -1,8 +1,8 @@
-import * as crypto from 'crypto';
+import { hashAuthToken } from '../common';
 
 exports.run = async (event: any) => {
     if (event?.queryStringParameters?.auth_token) {
-        const authHash = crypto.createHash('sha256').update(event.queryStringParameters.auth_token).digest('hex');
+        const authHash = hashAuthToken(event.queryStringParameters.auth_token);
 
         // console.log('DBG AUTH HASH', authHash);
         // TODO: lookup dynamodb: MIRROR#<auth_token_hash>
