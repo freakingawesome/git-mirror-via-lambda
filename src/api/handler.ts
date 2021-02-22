@@ -26,16 +26,17 @@ exports['POST:/api/mirror'] = async (event: any) => {
         && payload.targetPrivateKey
         && payload.targetRemote) {
 
-        var db = new DynamoDB();
-        const key = {
+        const db = new DynamoDB();
+        const meta = {
             PK: `MIRROR#${authHash}`,
             SK: `CONFIG`,
+            'GSI-1-SK': payload.sourceRemote,
         };
 
         try {
             await db.putItem({
                 TableName: process.env.TABLE_NAME!,
-                Item: DynamoDB.Converter.marshall(Object.assign({}, key, payload)),
+                Item: DynamoDB.Converter.marshall(Object.assign({}, meta, payload)),
                 ConditionExpression: 'attribute_not_exists(PK)'
             }).promise();
         } catch (x) {

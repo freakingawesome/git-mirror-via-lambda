@@ -87,7 +87,9 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
         const api = gateway.root.addResource('api');
 
         webhook.addMethod('POST', new apigateway.LambdaIntegration(lambdas.webhookHandler));
-        api.addResource('mirror').addMethod('POST', new apigateway.LambdaIntegration(lambdas.apiHandler));
+        api.addResource('mirror').addMethod('POST', new apigateway.LambdaIntegration(lambdas.apiHandler), {
+            authorizationType: apigateway.AuthorizationType.IAM,
+        });
     }
 
     createDynamoDB(): dynamodb.Table {
