@@ -5,6 +5,7 @@ import * as ec2 from '@aws-cdk/aws-ec2';
 import * as efs from '@aws-cdk/aws-efs';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as path from 'path';
+import * as iam from '@aws-cdk/aws-iam';
 
 interface AppLambdas {
     webhookHandler: lambda.Function,
@@ -30,6 +31,8 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
         table.grantReadWriteData(lambdas.apiHandler);
 
         lambdas.webhookHandler.addEnvironment('TABLE_NAME', table.tableName);
+        lambdas.webhookHandler.addEnvironment('DOWNSTREAM_MIRROR_FUNCTION', lambdas.mirrorHandler.functionName);
+
         lambdas.apiHandler.addEnvironment('TABLE_NAME', table.tableName);
     }
 
@@ -61,7 +64,6 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_14_X,
         });
 
-        // TODO: Protect with IAM Role
         const apiHandler = new lambda.Function(this, "gitMirrorViaLambdaApiFunction", {
             code: new lambda.AssetCode(path.join(__dirname, "../src")),
             handler: 'api/handler.router',
@@ -74,6 +76,8 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             vpc: vpc,
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
+
+        mirrorHandler.grantInvoke(webhookHandler);
 
         return { webhookHandler, mirrorHandler, apiHandler };
     }

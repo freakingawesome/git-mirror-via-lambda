@@ -1,6 +1,5 @@
-import { hashAuthToken } from '../common';
-import { DynamoDB } from 'aws-sdk';
-import { ConfigurationServicePlaceholders } from 'aws-sdk/lib/config_service_placeholders';
+import { hashAuthToken, httpResponse } from '../common';
+import { DynamoDB, Lambda } from 'aws-sdk';
 
 exports.run = async (event: any) => {
     if (event?.queryStringParameters?.auth_token) {
@@ -20,32 +19,18 @@ exports.run = async (event: any) => {
         if (config?.Item) {
             const mirror = DynamoDB.Converter.unmarshall(config.Item);
 
-            console.log('DBG this is what I will notify', mirror);
+            const lambda = new Lambda();
+            await lambda.invoke({
+                FunctionName: process.env['DOWNSTREAM_MIRROR_FUNCTION'] as string,
+                InvocationType: 'Event',
+                Payload: JSON.stringify(mirror),
+            }).promise();
 
             return httpResponse(true);
         }
-
-        // console.log('DBG AUTH HASH', authHash);
-        // TODO: lookup dynamodb: MIRROR#<auth_token_hash>
-        //     - sourceRemote
-        //     - sourcePrivateKey
-        //     - targetRemote
-        //     - targetPrivateKey
 
         return httpResponse(false, 'Not Found', 404);
     }
 
     return httpResponse(false, 'Unauthorized', 401);
 };
-
-export function httpResponse(success: boolean, error?: string, statusCode?: Number): any {
-    var payload: any = { success };
-    if (error) {
-        payload.error = error;
-    }
-
-    return {
-        statusCode: statusCode || (success ? 200 : 400),
-        body: JSON.stringify(payload)
-    }
-}

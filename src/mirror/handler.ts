@@ -1,9 +1,8 @@
 exports.run = async (event: any) => {
-    const payload = JSON.parse(event.body);
-    console.log('DBG PAYLOAD 0010', payload);
+    console.log('DBG PAYLOAD 0010', event);
 
     return {
         statusCode: 200,
-        body: JSON.stringify(payload)
+        body: 'Hello world!'
     }
 };
