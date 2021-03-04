@@ -6,6 +6,8 @@ import * as efs from '@aws-cdk/aws-efs';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as path from 'path';
 import * as iam from '@aws-cdk/aws-iam';
+import { CfnOutput } from '@aws-cdk/core';
+import { Effect } from '@aws-cdk/aws-iam';
 
 interface AppLambdas {
     webhookHandler: lambda.Function,
@@ -34,6 +36,8 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
         lambdas.webhookHandler.addEnvironment('DOWNSTREAM_MIRROR_FUNCTION', lambdas.mirrorHandler.functionName);
 
         lambdas.apiHandler.addEnvironment('TABLE_NAME', table.tableName);
+
+        this.grantReadAccessToStackParameters(lambdas.mirrorHandler);
     }
 
     createFileSystem(vpc: ec2.IVpc): efs.AccessPoint {
@@ -72,7 +76,9 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
 
         const dockerfile = path.join(__dirname, "../src/mirror");
         const mirrorHandler = new lambda.DockerImageFunction(this, "gitMirrorViaLambdaMirrorFunction", {
-            code: lambda.DockerImageCode.fromImageAsset(dockerfile),
+            code: lambda.DockerImageCode.fromImageAsset(dockerfile, {
+
+            }),
             vpc: vpc,
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
@@ -111,5 +117,29 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
         });
 
         return table;
+    }
+
+    grantReadAccessToStackParameters(func: lambda.Function) {
+        const stackName = cdk.Stack.of(this).stackName;
+        const ssmPath = `/stack/${stackName}/privateKeys/`;
+
+        func.addToRolePolicy(new iam.PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['ssm:DescribeParameters'],
+            resources: ['*']
+        }));
+
+        func.addToRolePolicy(new iam.PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: [
+                'ssm:GetParameter',
+                'ssm:GetParameters'
+            ],
+            resources: [`arn:aws:ssm:*:*:parameter${ssmPath}*`]
+        }));
+
+
+        func.addEnvironment('SSM_PARAMETER_ROOT', ssmPath);
+        new CfnOutput(this, 'ParameterStorePathForSshPrivateKeys', { value: ssmPath });
     }
 }
