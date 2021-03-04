@@ -1,8 +1,6 @@
 import { SSM } from "aws-sdk";
 import * as fs from 'fs';
-
-const util = require('util');
-const exec = util.promisify(require('child_process').exec);
+import { execSync } from 'child_process';
 
 exports.run = async (event: any) => {
     if (event.sourcePrivateKey
@@ -10,12 +8,16 @@ exports.run = async (event: any) => {
         && event.targetPrivateKey
         && event.targetRemote) {
 
-        await execMirror({
-            PK: event.PK,
-            sourceRemote: event.sourceRemote,
-            sourceSshKeyPath: await getPrivateKeyPath(event.sourcePrivateKey),
-            targetRemote: event.targetRemote,
-            targetSshKeyPath: await getPrivateKeyPath(event.targetPrivateKey),
+        execSync(`${__dirname}/do-mirror.sh`, {
+            env: Object.assign({
+                REPO_PATH: `/mnt/repos/${event.PK}`,
+                SOURCE_REMOTE: event.sourceRemote,
+                SOURCE_KEY_PATH: await getPrivateKeyPath(event.sourcePrivateKey),
+                TARGET_REMOTE: event.targetRemote,
+                TARGET_KEY_PATH: await getPrivateKeyPath(event.targetPrivateKey)
+            }, process.env),
+            encoding: 'utf8',
+            stdio: 'inherit',
         });
     } else {
         console.error('Event arguments not shaped as expected', event);
@@ -28,7 +30,13 @@ exports.run = async (event: any) => {
 };
 
 async function getPrivateKeyPath(key: string): Promise<string> {
-    const path = `/tmp/ssh-keys/${key}`;
+    const dir = '/tmp/ssh-keys';
+
+    if (!fs.existsSync(dir)){
+        fs.mkdirSync(dir);
+    }
+
+    const path = `${dir}/${key}`;
 
     if (!fs.existsSync(path)) {
         const ssm = new SSM({});
@@ -39,7 +47,8 @@ async function getPrivateKeyPath(key: string): Promise<string> {
         }).promise();
 
         if (result?.Parameter?.Value) {
-            fs.writeFileSync(path, result.Parameter.Value);
+            fs.writeFileSync(path, `${result.Parameter.Value}`);
+            execSync(`chmod 400 ${path}`, { encoding: 'utf8', stdio: 'inherit' })
         } else {
             throw new Error(`Missing Parameter Store Secure String with Key: ${key}`)
         }
@@ -48,9 +57,7 @@ async function getPrivateKeyPath(key: string): Promise<string> {
     return path;
 }
 
-async function execMirror(args: any) {
-    const exe = `do-mirror.sh "${args.PK}" "${args.sourceRemote}" "${args.sourceSshKeyPath}" "${args.targetRemote}" "${args.targetSshKeyPath}"`;
-    const { stdout, stderr } = await exec(exe);
-    console.log('stdout:', stdout);
-    console.log('stderr:', stderr);
+async function execShell(command: string) {
+    console.log('Executing shell command', command);
+    execSync(command, { encoding: 'utf8', stdio: 'inherit' });
 }

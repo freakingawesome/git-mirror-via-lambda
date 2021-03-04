@@ -74,12 +74,14 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_14_X,
         });
 
-        const dockerfile = path.join(__dirname, "../src/mirror");
-        const mirrorHandler = new lambda.DockerImageFunction(this, "gitMirrorViaLambdaMirrorFunction", {
-            code: lambda.DockerImageCode.fromImageAsset(dockerfile, {
-
-            }),
+        const mirrorHandler = new lambda.Function(this, "gitMirrorViaLambdaMirrorFunction", {
+            code: new lambda.AssetCode(path.join(__dirname, "../src")),
+            handler: 'mirror/handler.run',
+            runtime: lambda.Runtime.NODEJS_14_X,
             vpc: vpc,
+            layers: [
+                lambda.LayerVersion.fromLayerVersionArn(this, 'gitMirrorViaLambdaMirrorGitLayer', 'arn:aws:lambda:us-east-1:553035198032:layer:git-lambda2:8')
+            ],
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
 
