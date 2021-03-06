@@ -6,7 +6,7 @@ import * as efs from '@aws-cdk/aws-efs';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as path from 'path';
 import * as iam from '@aws-cdk/aws-iam';
-import { CfnOutput } from '@aws-cdk/core';
+import { CfnOutput, Duration } from '@aws-cdk/core';
 import { Effect } from '@aws-cdk/aws-iam';
 
 interface AppLambdas {
@@ -78,6 +78,7 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             code: new lambda.AssetCode(path.join(__dirname, "../src")),
             handler: 'mirror/handler.run',
             runtime: lambda.Runtime.NODEJS_14_X,
+            timeout: Duration.minutes(10),
             vpc: vpc,
             layers: [
                 lambda.LayerVersion.fromLayerVersionArn(this, 'gitMirrorViaLambdaMirrorGitLayer', 'arn:aws:lambda:us-east-1:553035198032:layer:git-lambda2:8')
