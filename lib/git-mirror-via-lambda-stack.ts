@@ -9,6 +9,8 @@ import * as iam from '@aws-cdk/aws-iam';
 import { CfnOutput, Duration } from '@aws-cdk/core';
 import { Effect } from '@aws-cdk/aws-iam';
 
+const LAMBDA_LAYER_GIT_WITH_LFS = 'arn:aws:lambda:us-east-1:335342067272:layer:testing-git-lambda-layer-with-lfs:1';
+
 interface AppLambdas {
     webhookHandler: lambda.Function,
     mirrorHandler: lambda.Function,
@@ -62,26 +64,32 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
     }
 
     createLambdas(vpc: ec2.IVpc, fileSystem: efs.IAccessPoint): AppLambdas {
-        const webhookHandler = new lambda.Function(this, "gitMirrorViaLambdaWebhookFunction", {
+        const webhookHandler = new lambda.Function(this, "webhook", {
             code: new lambda.AssetCode(path.join(__dirname, "../src")),
             handler: 'webhook/handler.run',
             runtime: lambda.Runtime.NODEJS_14_X,
         });
 
-        const apiHandler = new lambda.Function(this, "gitMirrorViaLambdaApiFunction", {
+        const apiHandler = new lambda.Function(this, "api", {
             code: new lambda.AssetCode(path.join(__dirname, "../src")),
             handler: 'api/handler.router',
             runtime: lambda.Runtime.NODEJS_14_X,
+            timeout: Duration.minutes(1),
+            vpc: vpc,
+            layers: [
+                lambda.LayerVersion.fromLayerVersionArn(this, 'apiGitLayer', LAMBDA_LAYER_GIT_WITH_LFS)
+            ],
+            filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
 
-        const mirrorHandler = new lambda.Function(this, "gitMirrorViaLambdaMirrorFunction", {
+        const mirrorHandler = new lambda.Function(this, "mirror", {
             code: new lambda.AssetCode(path.join(__dirname, "../src")),
             handler: 'mirror/handler.run',
             runtime: lambda.Runtime.NODEJS_14_X,
             timeout: Duration.minutes(10),
             vpc: vpc,
             layers: [
-                lambda.LayerVersion.fromLayerVersionArn(this, 'gitMirrorViaLambdaMirrorGitLayer', 'arn:aws:lambda:us-east-1:335342067272:layer:testing-git-lambda-layer-with-lfs:1')
+                lambda.LayerVersion.fromLayerVersionArn(this, 'webhookGitLayer', LAMBDA_LAYER_GIT_WITH_LFS)
             ],
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
@@ -101,6 +109,9 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
 
         webhook.addMethod('POST', new apigateway.LambdaIntegration(lambdas.webhookHandler));
         api.addResource('mirror').addMethod('POST', new apigateway.LambdaIntegration(lambdas.apiHandler), {
+            authorizationType: apigateway.AuthorizationType.IAM,
+        });
+        api.addResource('known_hosts').addMethod('POST', new apigateway.LambdaIntegration(lambdas.apiHandler), {
             authorizationType: apigateway.AuthorizationType.IAM,
         });
     }

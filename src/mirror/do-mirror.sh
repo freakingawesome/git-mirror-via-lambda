@@ -2,24 +2,10 @@
 # set -e # There are some warnings from .ssh we cannot overcome, so let's just plow through
 set -x
 
-# The lambda layer puts git in /opt/bin
-# PATH=$PATH:/opt/bin
-
-# HACK: Until we store known_hosts in dynamodb for each remote, we're punting and disabling host verification
-# KNOWN_HOSTS='/tmp/known_hosts'
-# 
-# if [ ! -f $KNOWN_HOSTS ]; then
-#     # known_hosts taken from README of https://github.com/lambci/git-lambda-layer
-#     echo 'github.com,192.30.252.*,192.30.253.*,192.30.254.*,192.30.255.* ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' > $KNOWN_HOSTS
-# fi
-
 GIT_TRACE=1
 
 function git-ssh-command() {
-    # HACK: This is what the more secure known_hosts file version will look like. for now, we're cheating with StrictHostKeyChecking=no
-    # echo "ssh -i '$1' -o UserKnownHostsFile=$KNOWN_HOSTS -o IdentitiesOnly=yes"
-
-    echo "ssh -i '$1' -o StrictHostKeyChecking=no -o IdentitiesOnly=yes"
+    echo "ssh -o IdentitiesOnly=yes -F /dev/null -i $1 -o UserKnownHostsFile=/mnt/repos/.config/known_hosts"
 }
 
 if [ ! -d "$REPO_PATH" ]; then
@@ -30,3 +16,19 @@ cd "$REPO_PATH"
 
 GIT_SSH_COMMAND="$(git-ssh-command $SOURCE_KEY_PATH)" git remote update --prune
 GIT_SSH_COMMAND="$(git-ssh-command $TARGET_KEY_PATH)" git push --mirror "$TARGET_REMOTE"
+
+# WARNING: Git LFS may fail silently depending on your repo. Bitbucket.org fails with an HTTP 403 if your
+# organization requires 2FA. But if you're using repo-based SSH Access Keys, there is no way to enable
+# 2FA: You'l have to use an app password for an actual user account, which is a lousy oversight on bitbucket.org's
+# side of things.
+# Further info on this issue: if you run `GIT_CURL_VERBOSE=1 git lfs fetch --all` you can capture the JWT token
+# and try the request manually, which includes the error message in the body: "To access this repository, enable two-step verification."
+# Looks like someone pointed this out [in this bitbucket.org thread](https://community.atlassian.com/t5/Bitbucket-questions/Bitbucket-LFS-Access-Keys-amp-2FA/qaq-p/787619)
+# and Atlassian responded with an incomplete answer. I've pointed out the error, but I have little hope that it will actually be addressed.
+
+GIT_SSH_COMMAND="$(git-ssh-command $SOURCE_KEY_PATH)" git lfs fetch --all "$SOURCE_REMOTE"
+HAS_LFS=$(git lfs ls-files --all | head -n 1 | wc -l)
+
+if [ "$HAS_LFS" -gt "0" ]; then
+    GIT_SSH_COMMAND="$(git-ssh-command $TARGET_KEY_PATH)" git lfs push --all "$TARGET_REMOTE"
+fi
