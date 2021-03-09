@@ -81,7 +81,7 @@ export class GitMirrorViaLambdaStack extends cdk.Stack {
             timeout: Duration.minutes(10),
             vpc: vpc,
             layers: [
-                lambda.LayerVersion.fromLayerVersionArn(this, 'gitMirrorViaLambdaMirrorGitLayer', 'arn:aws:lambda:us-east-1:553035198032:layer:git-lambda2:8')
+                lambda.LayerVersion.fromLayerVersionArn(this, 'gitMirrorViaLambdaMirrorGitLayer', 'arn:aws:lambda:us-east-1:335342067272:layer:testing-git-lambda-layer-with-lfs:1')
             ],
             filesystem: lambda.FileSystem.fromEfsAccessPoint(fileSystem, '/mnt/repos')
         });
